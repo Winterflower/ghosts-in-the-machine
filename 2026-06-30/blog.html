@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>First Steps with SIMD — Ghosts in the Machine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@500;600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+  /* ─── TOKENS (identical to landing page) ──────────────────────────── */
+  :root {
+    --paper:      #F2EBDD;
+    --paper-deep: #E9DFC9;
+    --paper-code: #FAF8F2;
+    --ink:        #3A2E26;
+    --ink-deep:   #1A1410;
+    --ink-muted:  #7A6A5A;
+    --seal:       #8B2635;
+    --seal-deep:  #6E1D29;
+    --sage:       #5B6B4F;
+    --gold:       #C9A876;
+    --shadow:     0 10px 24px -10px rgba(26,20,16,0.30), 0 2px 6px -1px rgba(26,20,16,0.14);
+    --shadow-sm:  0 3px 10px -4px rgba(26,20,16,0.22);
+    --col-width:  680px;
+  }
+
+  * { box-sizing: border-box; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    background-color: var(--paper);
+    background-image:
+      radial-gradient(ellipse at top left,  rgba(201,168,118,0.16), transparent 55%),
+      radial-gradient(ellipse at bottom right, rgba(139,38,53,0.07), transparent 55%);
+    color: var(--ink);
+    font-family: 'EB Garamond', Georgia, serif;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 0;
+  }
+
+  /* ─── SITE HEADER ──────────────────────────────────────────────────── */
+  .site-header {
+    position: relative; z-index: 1;
+    text-align: center;
+    padding: 36px 28px 0;
+  }
+  .site-header a {
+    font-family: 'Cormorant SC', serif;
+    font-weight: 500;
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    color: var(--ink-deep);
+    text-decoration: none;
+    transition: color 0.25s;
+  }
+  .site-header a:hover { color: var(--seal); }
+  .site-rule {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; margin: 14px auto 0; max-width: 320px;
+  }
+  .site-rule .line { height: 1px; flex: 1; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+  .site-rule .mark {
+    width: 6px; height: 6px;
+    border: 1px solid var(--gold);
+    transform: rotate(45deg);
+    background: var(--paper);
+  }
+
+  /* ─── PAGE WRAPPER ─────────────────────────────────────────────────── */
+  .page {
+    position: relative; z-index: 1;
+    max-width: var(--col-width);
+    margin: 0 auto;
+    padding: 52px 28px 100px;
+  }
+
+  /* ─── POST HEADER ──────────────────────────────────────────────────── */
+  .post-header { text-align: center; margin-bottom: 52px; }
+  .post-eyebrow {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 12.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--seal);
+    margin: 0 0 16px;
+  }
+  .post-eyebrow::before, .post-eyebrow::after {
+    content: "✦";
+    color: var(--gold);
+    margin: 0 10px;
+    font-size: 9px;
+    vertical-align: middle;
+  }
+  h1.post-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(34px, 5.5vw, 52px);
+    line-height: 1.12;
+    color: var(--ink-deep);
+    margin: 0 0 24px;
+    letter-spacing: 0.01em;
+  }
+  .post-rule {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; margin: 0 auto; max-width: 280px;
+  }
+  .post-rule .line { height: 1px; flex: 1; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+  .post-rule .mark {
+    width: 6px; height: 6px;
+    border: 1px solid var(--gold);
+    transform: rotate(45deg);
+    background: var(--paper);
+  }
+
+  /* ─── CAUTION NOTE ─────────────────────────────────────────────────── */
+  .caution {
+    background: var(--paper-code);
+    border-left: 3px solid var(--gold);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 22px;
+    margin: 0 0 44px;
+    box-shadow: var(--shadow-sm);
+  }
+  .caution p {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 17px;
+    color: var(--ink-muted);
+    margin: 0;
+    line-height: 1.55;
+  }
+  .caution p::before { content: "⚠\FE0E\2002"; font-style: normal; font-size: 13px; color: var(--gold); }
+
+  /* ─── BODY PROSE ───────────────────────────────────────────────────── */
+  .post-body { font-size: 19.5px; line-height: 1.72; color: var(--ink); }
+  .post-body p { margin: 0 0 1.35em; }
+  .post-body a {
+    color: var(--seal);
+    text-decoration: underline;
+    text-decoration-color: rgba(139,38,53,0.35);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.2s;
+  }
+  .post-body a:hover { text-decoration-color: var(--seal); }
+
+  /* ─── SECTION HEADINGS ─────────────────────────────────────────────── */
+  .post-body h2 {
+    font-family: 'Cormorant SC', serif;
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    color: var(--ink-deep);
+    margin: 2.6em 0 0.15em;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(201,168,118,0.55);
+  }
+
+  /* ─── INLINE CODE ──────────────────────────────────────────────────── */
+  .post-body code {
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+    font-size: 0.78em;
+    color: var(--seal-deep);
+    background: rgba(201,168,118,0.18);
+    padding: 1px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  /* ─── CODE BLOCKS ──────────────────────────────────────────────────── */
+  .code-block {
+    position: relative;
+    background: var(--paper-code);
+    border: 1px solid rgba(201,168,118,0.5);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    margin: 0.4em 0 2em;
+    overflow: hidden;
+  }
+  .code-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px 9px;
+    border-bottom: 1px solid rgba(201,168,118,0.35);
+    background: rgba(201,168,118,0.10);
+  }
+  .code-lang {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+  }
+  .copy-btn {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 12.5px;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    background: none;
+    border: 1px solid rgba(201,168,118,0.5);
+    border-radius: 5px;
+    padding: 3px 11px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+  }
+  .copy-btn:hover { color: var(--seal); border-color: var(--seal); background: rgba(139,38,53,0.05); }
+  .copy-btn.copied { color: var(--sage); border-color: var(--sage); }
+  .code-scroll { overflow-x: auto; padding: 20px 0 18px; }
+  .code-table { border-collapse: collapse; width: 100%; min-width: max-content; }
+  .code-table tr { line-height: 1.6; }
+  .ln {
+    width: 1px; padding: 0 6px 0 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: rgba(139,38,53,0.35);
+    text-align: right;
+    user-select: none;
+    white-space: nowrap;
+    vertical-align: top;
+  }
+  .lc {
+    padding: 0 22px 0 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13.5px;
+    color: var(--ink-deep);
+    white-space: pre;
+    vertical-align: top;
+  }
+  /* Syntax highlight classes */
+  .k  { color: var(--seal-deep); }
+  .t  { color: #5B6B4F; }
+  .c  { color: #8A7A64; font-style: italic; }
+  .s  { color: #7A4F2A; }
+  .fn { color: #4A3B8A; }
+  .pp { color: var(--seal); }
+
+  /* ─── FOOTER ───────────────────────────────────────────────────────── */
+  .post-footer { margin-top: 72px; text-align: center; }
+  .post-footer .rule-sm {
+    width: 48px; height: 1px;
+    background: var(--gold);
+    margin: 0 auto 16px;
+  }
+  .post-footer p {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink);
+    opacity: 0.5;
+    letter-spacing: 0.04em;
+    margin: 0;
+  }
+
+</style>
+</head>
+<body>
+<header class="site-header">
+  <a href="index.html">Ghosts in the Machine</a>
+  <div class="site-rule"><span class="line"></span><span class="mark"></span><span class="line"></span></div>
+</header>
+<main class="page">
+
+  <div class="post-header">
+    <p class="post-eyebrow">No.&thinsp;1&thinsp;&mdash;&thinsp;30th June</p>
+    <h1 class="post-title">First Steps with SIMD</h1>
+    <div class="post-rule"><span class="line"></span><span class="mark"></span><span class="line"></span></div>
+  </div>
+  <aside class="caution">
+    <p>I am total noob in this topic - errors may follow - proceed with caution</p>
+  </aside>
+
+  <article class="post-body">
+
+    <p>SIMD - single instruction, multiple data - refers to a special set of CPU instructions that are able to operate on multiple pieces of data simultaneously.</p>
+
+    <p>Consider adding numbers from two arrays. Doing this sequentially, one would load the integer from the first array at position 0, then the integer from the second array at position 0, then add them together. Repeat this process until all of the elements in an array are processed.</p>
+
+    <p>Of course, you could operate independently on multiple elements of the two arrays at the same time without causing problems and to some extent modern compilers are already smart enough to vectorize code for you.</p>
+
+    <p>But what if you wanted to do it yourself?</p>
+
+    <p>My ultimate goal here would be to learn how to accelerate text processing (important for search engines) using SIMD instructions, but since I am more familiar with various numerical computations (from my time doing ML engineering for recommender systems), I thought I'd start there.</p>
+
+    <p>As the first order of business, I'm going to be adding two arrays of numbers and comparing the results between a naive implementation in C (with no special compiler flags) and an implementation in C that uses ARM NEON intrinsics (since I will be running this code on a Mac).</p>
+
+    <h2>Gathering Some Online Documentation</h2>
+
+    <p>Perhaps due to a transient skills issue, I failed to find a good tutorial on ARM Neon Intrinsics ( a type of function (?) one can call directly from C code) so I ended up following the examples in this Github repository and looking at the ARM NEON Intrinsics reference here.</p>
+
+    <p>Later, I did stumble upon these tutorials, which I am including here for completeness.</p>
+
+    <h2>Naive vs SIMD Implementation</h2>
+
+    <p>(btw, I am not a C developer and never have been. Apart from a brief dalliance with Kernighan &amp; Ritchie's C book, I have never dared to write C - that is until now)</p>
+
+    <p>Here is the naive addition implementation in C. It's pretty basic (in the pumpkin spice latte) interpreation of the term.</p>
+
+    <p>We have two arrays of 1024 dimensions (common embedding size, btw). We randomly generate these arrays and then add them together in the result array.</p>
+
+    <div class="code-block" id="cb1">
+      <div class="code-block-header">
+        <span class="code-lang">code</span>
+        <button class="copy-btn" onclick="copyCode('cb1', this)">copy</button>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody>
+          <tr><td class="ln">1</td><td class="lc"><span class="pp">#</span><span class="pp">include</span> <span class="pp">&lt;stdio.h&gt;</span></td></tr>
+          <tr><td class="ln">2</td><td class="lc"><span class="pp">#</span><span class="pp">include</span> <span class="pp">&lt;stdint.h&gt;</span></td></tr>
+          <tr><td class="ln">3</td><td class="lc"><span class="pp">#</span><span class="pp">include</span> <span class="pp">&lt;stdlib.h&gt;</span></td></tr>
+          <tr><td class="ln">4</td><td class="lc"></td></tr>
+          <tr><td class="ln">5</td><td class="lc"><span class="t">int</span> <span class="fn">main</span>(<span class="t">void</span>){</td></tr>
+          <tr><td class="ln">6</td><td class="lc"></td></tr>
+          <tr><td class="ln">7</td><td class="lc">    <span class="c">// why use uint_32 - constantly 4 bytes regardless of platform implementation</span></td></tr>
+          <tr><td class="ln">8</td><td class="lc">    <span class="t">int</span> len_array = <span class="s">1024</span>;</td></tr>
+          <tr><td class="ln">9</td><td class="lc"></td></tr>
+          <tr><td class="ln">10</td><td class="lc">    <span class="t">int</span> total_runs = <span class="s">1000000</span>;</td></tr>
+          <tr><td class="ln">11</td><td class="lc">    </td></tr>
+          <tr><td class="ln">12</td><td class="lc">    <span class="k">for</span>(<span class="t">int</span> i=<span class="s">0</span>; i&lt;total_runs;i++){</td></tr>
+          <tr><td class="ln">13</td><td class="lc">    <span class="t">uint32_t</span> first_array[len_array];</td></tr>
+          <tr><td class="ln">14</td><td class="lc">    <span class="t">uint32_t</span> second_array[len_array];</td></tr>
+          <tr><td class="ln">15</td><td class="lc">    <span class="t">uint32_t</span> result_array[len_array];</td></tr>
+          <tr><td class="ln">16</td><td class="lc"></td></tr>
+          <tr><td class="ln">17</td><td class="lc">    <span class="c">//testing arcrandom generation </span></td></tr>
+          <tr><td class="ln">18</td><td class="lc">    <span class="t">uint32_t</span> random_int = arc4random();</td></tr>
+          <tr><td class="ln">19</td><td class="lc">    <span class="c">//printf(&quot;%d is a random_int\n&quot;, random_int);</span></td></tr>
+          <tr><td class="ln">20</td><td class="lc"></td></tr>
+          <tr><td class="ln">21</td><td class="lc">    <span class="k">for</span>(<span class="t">int</span> i=<span class="s">0</span>; i&lt;len_array; i++){</td></tr>
+          <tr><td class="ln">22</td><td class="lc">      first_array[i]=arc4random();</td></tr>
+          <tr><td class="ln">23</td><td class="lc">      second_array[i]=arc4random();</td></tr>
+          <tr><td class="ln">24</td><td class="lc">}</td></tr>
+          <tr><td class="ln">25</td><td class="lc"></td></tr>
+          <tr><td class="ln">26</td><td class="lc">    <span class="k">for</span>(<span class="t">int</span> i=<span class="s">0</span>; i&lt;len_array; i++){</td></tr>
+          <tr><td class="ln">27</td><td class="lc">      result_array[i]=first_array[i]+second_array[i];</td></tr>
+          <tr><td class="ln">28</td><td class="lc"></td></tr>
+          <tr><td class="ln">29</td><td class="lc">}</td></tr>
+          <tr><td class="ln">30</td><td class="lc">    }</td></tr>
+          <tr><td class="ln">31</td><td class="lc"></td></tr>
+          <tr><td class="ln">32</td><td class="lc"></td></tr>
+          <tr><td class="ln">33</td><td class="lc"></td></tr>
+          <tr><td class="ln">34</td><td class="lc"></td></tr>
+          <tr><td class="ln">35</td><td class="lc">}</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <p>We can compile this code with the default flags using <code>clang</code> and run it</p>
+
+    <div class="code-block" id="cb2">
+      <div class="code-block-header">
+        <span class="code-lang">code</span>
+        <button class="copy-btn" onclick="copyCode('cb2', this)">copy</button>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody>
+          <tr><td class="ln">1</td><td class="lc">clang -o simple_addition  simple_ddition.c </td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <p>Let's rewrite the above using ARM NEON intrinsics. Instead of iterating over each element in <code>first_array</code> and <code>second_array</code>, we are going to read the elements in groups of 4 and pass them into the intrinsic for addition as shown below:</p>
+
+    <div class="code-block" id="cb3">
+      <div class="code-block-header">
+        <span class="code-lang">code</span>
+        <button class="copy-btn" onclick="copyCode('cb3', this)">copy</button>
+      </div>
+      <div class="code-scroll">
+        <table class="code-table"><tbody>
+          <tr><td class="ln">1</td><td class="lc">		for(int i=0;i&lt;1024;i+=4){</td></tr>
+          <tr><td class="ln">2</td><td class="lc"></td></tr>
+          <tr><td class="ln">3</td><td class="lc">		uint32x4_t first_lane = vld1q_u32(first_array+i);</td></tr>
+          <tr><td class="ln">4</td><td class="lc">		uint32x4_t second_lane = vld1q_u32(second_array+i);</td></tr>
+          <tr><td class="ln">5</td><td class="lc"></td></tr>
+          <tr><td class="ln">6</td><td class="lc">		uint32x4_t result_lane = vaddq_u32(first_lane, second_lane);</td></tr>
+          <tr><td class="ln">7</td><td class="lc">		vst1q_u32(&amp;result_array[i],result_lane);</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+
+    <p>We can similarly compile this code and run it (though, as we will later learn, there may be additional flags that are needed to instruct the compiler to take full advantage of the SIMD instructions).</p>
+
+  </article>
+
+  <footer class="post-footer">
+    <div class="rule-sm"></div>
+    <p>Every entry transcribed faithfully &middot; some things do not stay where they are put</p>
+  </footer>
+
+</main>
+
+<script>
+  function copyCode(blockId, btn) {{
+    const block = document.getElementById(blockId);
+    const lines = block.querySelectorAll('.lc');
+    const text = Array.from(lines).map(l => l.textContent).join('\n').trimEnd();
+    navigator.clipboard.writeText(text).then(() => {{
+      btn.textContent = 'copied ✦';
+      btn.classList.add('copied');
+      setTimeout(() => {{
+        btn.textContent = 'copy';
+        btn.classList.remove('copied');
+      }}, 1800);
+    }});
+  }}
+
+  document.addEventListener('DOMContentLoaded', () => {{
+    const article = document.querySelector('.post-body');
+    if (!article) return;
+    article.style.opacity = '0';
+    article.style.transform = 'translateY(12px)';
+    article.style.transition = 'opacity 0.7s ease, transform 0.7s ease';
+    setTimeout(() => {{
+      article.style.opacity = '1';
+      article.style.transform = 'translateY(0)';
+    }}, 80);
+  }});
+</script>
+
+</body>
+</html>
